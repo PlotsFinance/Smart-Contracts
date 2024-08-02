@@ -244,18 +244,25 @@ contract PlotsCore {
 
     function DelistToken(address Collection, uint256 TokenId) public{
         require(ListedCollectionsMap[Collection] == true && ListingsByCollection[Collection][ListingsByCollectionIndex[Collection][TokenId]].Lister != address(0), "Collection not listed or token not listed");
-    
-        if(ListingsByCollection[Collection][ListingsByCollectionIndex[Collection][TokenId]].Lister == Treasury){
+
+        address lister = ListingsByCollection[Collection][ListingsByCollectionIndex[Collection][TokenId]].Lister;
+        
+        if (lister == Treasury) {
             require(Admins[msg.sender], "Only Admin");
-        }
-        else{
-            require(ListingsByCollection[Collection][ListingsByCollectionIndex[Collection][TokenId]].Lister == msg.sender, "Not owner of listing");
-            RemoveListingFromUser(msg.sender, Collection, TokenId);
+        } else {
+            require(lister == msg.sender || msg.sender == LendContract, "Not owner of listing");
+            
+            if (msg.sender == LendContract) {
+                RemoveListingFromUser(lister, Collection, TokenId);
+            } else {
+                RemoveListingFromUser(msg.sender, Collection, TokenId);
+            }
         }
 
         RemoveListingFromCollection(Collection, TokenId);
         ListedBool[Collection][TokenId] = false;
     }
+
 
     function AutoList(address Collection, uint256 TokenId, address User) external{
         require(msg.sender == Treasury || msg.sender == LendContract, "Only Admin, Treasury or Lend Contract");
@@ -355,8 +362,9 @@ contract PlotsCore {
 
     function RemoveListingFromCollection(address _collection, uint256 _tokenId) internal{
         ListingsByCollection[_collection][ListingsByCollectionIndex[_collection][_tokenId]] = ListingsByCollection[_collection][ListingsByCollection[_collection].length - 1];
-        ListingsByCollectionIndex[_collection][_tokenId] = ListingsByCollectionIndex[_collection][_tokenId];
+        ListingsByCollectionIndex[_collection][ListingsByCollection[_collection][ListingsByCollectionIndex[_collection][_tokenId]].TokenId] = ListingsByCollectionIndex[_collection][_tokenId];
         ListingsByCollection[_collection].pop();
+
         ListingsByCollectionIndex[_collection][_tokenId] = 0;
     }
 
@@ -367,8 +375,9 @@ contract PlotsCore {
 
     function RemoveListingFromUser(address _user, address _collection, uint256 _tokenId) internal{
         ListingsByUser[_user][ListingsByUserIndex[_user][_collection][_tokenId]] = ListingsByUser[_user][ListingsByUser[_user].length - 1];
-        ListingsByUserIndex[_user][_collection][_tokenId] = ListingsByUserIndex[_user][_collection][_tokenId];
+        ListingsByUserIndex[_user][_collection][ListingsByUser[_user][ListingsByUserIndex[_user][_collection][_tokenId]].TokenId] = ListingsByUserIndex[_user][_collection][_tokenId];
         ListingsByUser[_user].pop();
+
         ListingsByUserIndex[_user][_collection][_tokenId] = 0;
     }
 
@@ -714,7 +723,8 @@ contract PlotsLend {
         }
         AllUserTokens[msg.sender].pop();
         AllUserTokensIndex[msg.sender][Collection][TokenId] = 0;
-}
+    }
+
     function WithdrawTokens(address[] memory Collections, uint256[] memory TokenIds) public{
         require(Collections.length == TokenIds.length, "Arrays not same length");
         for(uint256 i = 0; i < Collections.length; i++){
