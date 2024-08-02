@@ -396,17 +396,17 @@ contract PlotsCore {
     //remove loan from a borrower and a lender with just the loan address IN ONE function
     function RemoveLoanFromBorrowerAndLender(address Borrower, address Lender, address _loan) internal{
         AllLoans[AllLoansIndex[_loan]] = AllLoans[AllLoans.length - 1];
-        AllLoansIndex[_loan] = AllLoansIndex[_loan];
+        AllLoansIndex[AllLoans[AllLoansIndex[_loan]]] = AllLoansIndex[_loan];
         AllLoans.pop();
         AllLoansIndex[_loan] = 0;
 
         AllUserLoans[Lender][AllUserLoansIndex[Lender][_loan]] = AllUserLoans[Lender][AllUserLoans[Lender].length - 1];
-        AllUserLoansIndex[Lender][_loan] = AllUserLoansIndex[Lender][_loan];
+        AllUserLoansIndex[Lender][AllUserLoans[Lender][AllUserLoansIndex[Lender][_loan]]] = AllUserLoansIndex[Lender][_loan];
         AllUserLoans[Lender].pop();
         AllUserLoansIndex[Lender][_loan] = 0;
 
         AllUserBorrows[Borrower][AllUserBorrowsIndex[Borrower][_loan]] = AllUserBorrows[Borrower][AllUserBorrows[Borrower].length - 1];
-        AllUserBorrowsIndex[Borrower][_loan] = AllUserBorrowsIndex[Borrower][_loan];
+        AllUserBorrowsIndex[Borrower][AllUserBorrows[Borrower][AllUserBorrowsIndex[Borrower][_loan]]] = AllUserBorrowsIndex[Borrower][_loan];
         AllUserBorrows[Borrower].pop();
         AllUserBorrowsIndex[Borrower][_loan] = 0;
     }
