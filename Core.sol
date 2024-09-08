@@ -7,8 +7,6 @@ contract PlotsCore {
     address public LendContract;
     address payable public FeeReceiver;
 
-    uint256 public RewardFee;
-    uint256 public LockedValue;
     address[] public ListedCollections;
     mapping(address => bool) public ListedCollectionsMap;
     mapping(address => uint256) public ListedCollectionsIndex;
@@ -63,6 +61,8 @@ contract PlotsCore {
     // Events
     event LoanOpened(address indexed borrower, address indexed lender, address indexed collection, uint256 tokenId);
     event LoanClosed(address indexed borrower, address indexed lender, address indexed collection, uint256 tokenId);
+    event AdminAdded(address indexed newAdmin);
+    event AdminRemoved(address indexed oldAdmin);
 
     constructor(address[] memory _admins, address payable _feeReceiver) {
         FeeReceiver = _feeReceiver;
@@ -153,6 +153,7 @@ contract PlotsCore {
 
     function AutoList(address Collection, uint256 TokenId, address User) external {
         require(msg.sender == Treasury || msg.sender == LendContract, "Only Admin, Treasury or Lend Contract");
+        require(ListedCollectionsMap[Collection] == true, "Collection N/Listed");
 
         if (msg.sender == Treasury) {
             AddListingToCollection(Collection, TokenId, Listing(Treasury, Collection, TokenId));
@@ -296,9 +297,17 @@ contract PlotsCore {
         }
     }
 
-    function ChangeRewardFee(uint256 NewFee) public OnlyAdmin {
-        require(NewFee <= 1500, "Fee must be less than 15%");
-        RewardFee = NewFee;
+    function ModifyAdmin(address admin, bool add) external OnlyAdmin {
+        require(admin != address(0), "Invalid address");
+        if (add) {
+            require(!Admins[admin], "Already an admin");
+            Admins[admin] = true;
+            emit AdminAdded(admin);
+        } else {
+            require(Admins[admin], "Not an admin");
+            Admins[admin] = false;
+            emit AdminRemoved(admin);
+        }
     }
 
     function ModifyCollection(address _collection, bool addRemove) public OnlyAdmin {
@@ -323,7 +332,8 @@ contract PlotsTreasury {
     // Variable and pointer Declarations
     address public immutable PlotsCoreContract;
     address public VLND;
-    IDelegateRegistryV2 public constant DELEGATE_REGISTRY = IDelegateRegistryV2(0x00000000000000447e69651d841bD8D104Bed493);
+    IDelegateRegistryV1 public constant DELEGATE_REGISTRY_V1 = IDelegateRegistryV1(0x00000000000076A84feF008CDAbe6409d2FE638B);
+    IDelegateRegistryV2 public constant DELEGATE_REGISTRY_V2 = IDelegateRegistryV2(0x00000000000000447e69651d841bD8D104Bed493);
 
     uint private InitialVLNDPrice = 500 * (10**12);
     bool public mintingPaused = false;
@@ -383,7 +393,7 @@ contract PlotsTreasury {
         uint256 VLNDPrice = GetVLNDPrice();
         uint256 Value = (Amount * VLNDPrice) / 10 ** 18;
 
-        require((address(this).balance - PlotsCore(PlotsCoreContract).LockedValue()) >= ((GetTotalValue() * 5) / 100), "Not enough ether in treasury, must leave 5%");
+        require((address(this).balance >= (GetTotalValue() * 5) / 100), "Not enough ether in treasury, must leave 5%");
         require(Value >= minOut, "Value must be greater than or equal to minOut");
 
         IERC20(VLND).transferFrom(msg.sender, address(this), Amount);
@@ -425,7 +435,7 @@ contract PlotsTreasury {
     }
 
     function SendEther(address payable Recipient, uint256 Amount) public OnlyAdmin {
-        require((address(this).balance - PlotsCore(PlotsCoreContract).LockedValue()) >= Amount, "Not enough ether in treasury");
+        require(address(this).balance >= Amount, "Not enough ether in treasury");
         Recipient.transfer(Amount);
     }
 
@@ -447,10 +457,13 @@ contract PlotsTreasury {
         VLND = _vlnd;
     }
 
-    function DelegateNFT(address borrower, address collection, uint256 tokenId, bool revoke) OnlyCore external {
+    function DelegateNFT(address borrower, address collection, uint256 tokenId, bool Delegate) external OnlyCore {
         require(msg.sender == PlotsCoreContract, "Only PlotsCore can call");
 
-        DELEGATE_REGISTRY.delegateERC721(borrower, collection, tokenId, bytes32(0), revoke);
+        // V1 Delegation
+        DELEGATE_REGISTRY_V1.delegateForToken(borrower, collection, tokenId, Delegate);
+        // V2 Delegation
+        DELEGATE_REGISTRY_V2.delegateERC721(borrower, collection, tokenId, bytes32(0), Delegate);
     }
 
     // Internals
@@ -477,7 +490,7 @@ contract PlotsTreasury {
         for (uint256 i = 0; i < ListedCollections.length; i++) {
             TotalValue += CollectionEtherValue[ListedCollections[i]];
         }
-        TotalValue += (address(this).balance - PlotsCore(PlotsCoreContract).LockedValue());
+        TotalValue += address(this).balance;
         return TotalValue;
     }
 
@@ -516,7 +529,8 @@ contract PlotsTreasury {
 contract PlotsLend {
     //Variable and pointer Declarations
     address public immutable PlotsCoreContract;
-    IDelegateRegistryV2 public constant DELEGATE_REGISTRY = IDelegateRegistryV2(0x00000000000000447e69651d841bD8D104Bed493);
+    IDelegateRegistryV1 public constant DELEGATE_REGISTRY_V1 = IDelegateRegistryV1(0x00000000000076A84feF008CDAbe6409d2FE638B);
+    IDelegateRegistryV2 public constant DELEGATE_REGISTRY_V2 = IDelegateRegistryV2(0x00000000000000447e69651d841bD8D104Bed493);
 
 
     constructor(address _coreContract){
@@ -605,10 +619,13 @@ contract PlotsLend {
         TokenDepositor[Collection][TokenId] = address(0);
     }
 
-    function DelegateNFT(address borrower, address collection, uint256 tokenId, bool revoke) OnlyCore external {
+    function DelegateNFT(address borrower, address collection, uint256 tokenId, bool Delegate) external OnlyCore {
         require(msg.sender == PlotsCoreContract, "Only PlotsCore can call");
 
-        DELEGATE_REGISTRY.delegateERC721(borrower, collection, tokenId, bytes32(0), revoke);
+        // V1 Delegation
+        DELEGATE_REGISTRY_V1.delegateForToken(borrower, collection, tokenId, Delegate);
+        // V2 Delegation
+        DELEGATE_REGISTRY_V2.delegateERC721(borrower, collection, tokenId, bytes32(0), Delegate);
     }
 
     //View Functions 
@@ -665,11 +682,9 @@ interface IERC721 {
 }
 
 interface IDelegateRegistryV2 {
-    function delegateERC721(
-        address to, 
-        address contract_, 
-        uint256 tokenId, 
-        bytes32 rights, 
-        bool enable
-    ) external;
+    function delegateERC721(address to, address contract_, uint256 tokenId, bytes32 rights, bool enable) external;
+}
+
+interface IDelegateRegistryV1 {
+    function delegateForToken(address delegate, address contract_, uint256 tokenId, bool value) external;
 }
