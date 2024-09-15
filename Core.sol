@@ -71,7 +71,6 @@ contract PlotsCore {
             Admins[_admins[i]] = true;
         }
         Admins[msg.sender] = true;
-        Admins[Treasury] = true;
     }
 
     // Can only be set once
@@ -90,9 +89,9 @@ contract PlotsCore {
         uint256 TokenIndex = ListingsByCollectionIndex[Collection][TokenId];
         require(ListingsByCollection[Collection][TokenIndex].Lister != address(0), "Token N/Listed");
 
-        address TokenOwner = ListingsByCollection[Collection][TokenIndex].Lister;
+        address Lister = ListingsByCollection[Collection][TokenIndex].Lister;
 
-        if (ListingsByCollection[Collection][TokenIndex].Lister != Treasury) {
+        if (Lister != Treasury) {
             if (Duration == LengthOption.ThreeMonths) {
                 UsageExpirationUnix[Collection][TokenId] = block.timestamp + 7776000;
             } else {
@@ -100,8 +99,8 @@ contract PlotsCore {
             }
         }
 
-        AddLoanToBorrowerAndLender(msg.sender, ListingsByCollection[Collection][TokenIndex].Lister, Collection, TokenId);
-        RemoveListingFromUser(ListingsByCollection[Collection][TokenIndex].Lister, Collection, TokenId);
+        AddLoanToBorrowerAndLender(msg.sender, Lister, Collection, TokenId);
+        RemoveListingFromUser(Lister, Collection, TokenId);
         RemoveListingFromCollection(Collection, TokenId);
 
         OwnershipByPurchase[Collection][TokenId] = msg.sender;
@@ -111,7 +110,7 @@ contract PlotsCore {
         ActiveLoan[msg.sender] = true;
 
         // Emit event for loan opening
-        emit LoanOpened(msg.sender, TokenOwner, Collection, TokenId);
+        emit LoanOpened(msg.sender, Lister, Collection, TokenId);
     }
 
     function CloseLoan(address Collection, uint256 ID) public {
@@ -120,8 +119,7 @@ contract PlotsCore {
             AllLoans[AllLoansIndex[Collection][ID]].Borrower == msg.sender ||
             Admins[msg.sender] ||
             AllLoans[AllLoansIndex[Collection][ID]].Lender == msg.sender && 
-            UsageExpirationUnix[Collection][ID] < block.timestamp || 
-            msg.sender == Treasury,
+            UsageExpirationUnix[Collection][ID] < block.timestamp,
             "Invalid loan"
         );
 
@@ -312,10 +310,12 @@ contract PlotsCore {
 
     function ModifyCollection(address _collection, bool addRemove) public OnlyAdmin {
         if (addRemove) {
+            require(!ListedCollectionsMap[_collection], "Collection already listed");
             ListedCollections.push(_collection);
             ListedCollectionsIndex[_collection] = ListedCollections.length - 1;
             ListedCollectionsMap[_collection] = true;
         } else {
+            require(ListedCollectionsMap[_collection], "Collection not listed");
             uint256 index = ListedCollectionsIndex[_collection];
             ListedCollections[index] = ListedCollections[ListedCollections.length - 1];
             ListedCollectionsIndex[ListedCollections[index]] = index;
