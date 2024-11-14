@@ -8,33 +8,29 @@ pragma solidity ^0.8.19;
 
 contract PlotsFinance {
     uint256 public totalSupply;
-    uint256 public maxSupply;
+    uint256 public maxSupply = 1000000000000000000000000000;
     string public name;
     string public symbol;
     uint8 public decimals;
-    address private operator;
     address private ZeroAddress;
+    address public distributor;
     //variable Declarations
-    
       
     event Transfer(address indexed from, address indexed to, uint256 value);    
     event Approval(address indexed owner, address indexed spender, uint256 value);
     event BurnEvent(address indexed burner, uint256 indexed buramount);
-    event ManageMinterEvent(address indexed newminter);
-    //Event Declarations 
     
     mapping(address => uint256) balances;
 
     mapping(address => mapping (address => uint256)) public allowance;
     
-    mapping(address => bool) minter;
     
-    constructor(string memory _name, string memory _symbol){
+    constructor(string memory _name, string memory _symbol, address _distributor){
         totalSupply = 0;
         name = _name;
         symbol = _symbol;
         decimals = 18;
-        operator = msg.sender;
+        distributor = _distributor;
     }
     
     
@@ -72,7 +68,7 @@ contract PlotsFinance {
 
 
     function Mint(address _MintTo, uint256 _MintAmount) public {
-        require(minter[msg.sender] == true);
+        require(msg.sender == distributor);
         require(totalSupply+(_MintAmount) <= maxSupply);
         balances[_MintTo] = balances[_MintTo]+(_MintAmount);
         totalSupply = totalSupply+(_MintAmount);
@@ -91,14 +87,4 @@ contract PlotsFinance {
         emit BurnEvent(msg.sender, _BurnAmount);
         
     }
-
-    function ManageMinter(bool IsMinter, address _address) public returns(address){
-        require (msg.sender == operator);
-
-        minter[_address] = IsMinter;
-
-        emit ManageMinterEvent(_address);
-        return (_address);
-    }
-
 }
