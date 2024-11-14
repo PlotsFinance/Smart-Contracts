@@ -12,7 +12,6 @@ contract MerkleDistributor {
         uint256 cliffPeriod;   // Cliff period before vesting starts
         uint256 tgePercentage; // Initial percentage claimable at TGE
         uint256 totalRounds;   // Total number of vesting rounds
-        bool paused;           // Pause state of the distribution
     }
 
     Distribution[] public distributions;
@@ -21,8 +20,7 @@ contract MerkleDistributor {
     mapping(address => mapping(uint256 => bool)) public hasClaimed; // Tracks if a user has claimed all tokens in a distribution
 
     event Claimed(address indexed account, uint256 amount, uint256 distributionIndex);
-    event DistributionPaused(uint256 distributionIndex);
-    event DistributionUnpaused(uint256 distributionIndex);
+
 
     constructor(
         bytes32[] memory _merkleRoots,
@@ -44,8 +42,7 @@ contract MerkleDistributor {
                 merkleRoot: _merkleRoots[i],
                 cliffPeriod: block.timestamp + (_cliffPeriods[i] * timeUnit),
                 tgePercentage: _tgePercentages[i],
-                totalRounds: _totalRounds[i],
-                paused: false
+                totalRounds: _totalRounds[i]
             }));
         }
     }
@@ -53,20 +50,6 @@ contract MerkleDistributor {
     modifier onlyOwner() {
         require(msg.sender == owner, "Not owner");
         _;
-    }
-
-    /** @notice Pauses a distribution to prevent claims */
-    function pauseDistribution(uint256 distributionIndex) external onlyOwner {
-        require(distributionIndex < distributions.length, "Invalid distribution index");
-        distributions[distributionIndex].paused = true;
-        emit DistributionPaused(distributionIndex);
-    }
-
-    /** @notice Unpauses a distribution to allow claims */
-    function unpauseDistribution(uint256 distributionIndex) external onlyOwner {
-        require(distributionIndex < distributions.length, "Invalid distribution index");
-        distributions[distributionIndex].paused = false;
-        emit DistributionUnpaused(distributionIndex);
     }
 
     /** @notice Allows users to claim their tokens or others to claim on their behalf */
@@ -78,9 +61,6 @@ contract MerkleDistributor {
     ) public {
         require(distributionIndex < distributions.length, "Invalid distribution index");
         Distribution storage dist = distributions[distributionIndex];
-
-        // Check if distribution is paused
-        require(!dist.paused, "Distribution is paused");
 
         // Verify the merkle proof
         bytes32 node = keccak256(abi.encodePacked(claimant, amount));
