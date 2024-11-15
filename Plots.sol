@@ -1,3 +1,6 @@
+/**
+ *Submitted for verification at Etherscan.io on 2024-09-15
+*/
 
 //SPDX-License-Identifier:UNLICENSE
 pragma solidity ^0.8.19;
@@ -71,6 +74,7 @@ contract PlotsFinance {
         totalSupply = totalSupply+(_MintAmount);
         ZeroAddress = 0x0000000000000000000000000000000000000000;
         emit Transfer(ZeroAddress ,_MintTo, _MintAmount);
+        success = true;
         return(success);
     }
     //Mints tokens to your address 
