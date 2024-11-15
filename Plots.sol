@@ -1,6 +1,3 @@
-/**
- *Submitted for verification at Etherscan.io on 2024-09-15
-*/
 
 //SPDX-License-Identifier:UNLICENSE
 pragma solidity ^0.8.19;
@@ -67,18 +64,19 @@ contract PlotsFinance {
     }
 
 
-    function Mint(address _MintTo, uint256 _MintAmount) public {
+    function mint(address _MintTo, uint256 _MintAmount) public returns (bool success){
         require(msg.sender == distributor);
         require(totalSupply+(_MintAmount) <= maxSupply);
         balances[_MintTo] = balances[_MintTo]+(_MintAmount);
         totalSupply = totalSupply+(_MintAmount);
         ZeroAddress = 0x0000000000000000000000000000000000000000;
         emit Transfer(ZeroAddress ,_MintTo, _MintAmount);
+        return(success);
     }
     //Mints tokens to your address 
 
 
-    function Burn(uint256 _BurnAmount) public {
+    function burn(uint256 _BurnAmount) public {
         require (balances[msg.sender] >= _BurnAmount);
         balances[msg.sender] = balances[msg.sender]-(_BurnAmount);
         totalSupply = totalSupply-(_BurnAmount);
