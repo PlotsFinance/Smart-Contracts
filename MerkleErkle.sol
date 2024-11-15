@@ -2,7 +2,7 @@
 pragma solidity ^0.8.4;
 
 contract MerkleDistributor {
-    IERC20 public token;
+    IERC20 public token = IERC20(0x00BaA09F96928A168cd76c949ee9668C50EA2F44); // Set token address
     address public owner;
 
     uint256 public timeUnit = 30 days; // Set to 30 days for production
@@ -125,13 +125,6 @@ contract MerkleDistributor {
             claim(claimants[i], amounts[i], merkleProofs[i], distributionIndexes[i]);
         }
     }
-
-    function setToken(address _token) public onlyOwner {
-        require(address(token) == address(0), "Token already set");
-        token = IERC20(_token);
-
-        owner = address(0);
-    }
 }
 
 interface IERC20 {
@@ -141,7 +134,7 @@ interface IERC20 {
     function allowance(address owner, address spender) external view returns (uint256);
     function approve(address spender, uint256 amount) external returns (bool);
     function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
-    function mint(address to, uint256 amount) external returns (bool);
+    function mint(address _MintTo, uint256 _MintAmount) external returns (bool success);
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
 }
