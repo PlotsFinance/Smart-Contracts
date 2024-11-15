@@ -5,7 +5,7 @@ contract MerkleDistributor {
     IERC20 public token;
     address public owner;
 
-    uint256 public timeUnit = 30 days; // Set to 30 days for production
+    uint256 public timeUnit = 5 minutes; // Set to 30 days for production
 
     struct Distribution {
         bytes32 merkleRoot;    // Merkle root for this distribution
@@ -66,27 +66,40 @@ contract MerkleDistributor {
         bytes32 node = keccak256(abi.encodePacked(claimant, amount));
         require(MerkleProof.verify(merkleProof, dist.merkleRoot, node), "Invalid proof");
 
-        // Ensure the cliff period has passed
-        require(block.timestamp >= dist.cliffPeriod, "Cliff period not over");
-
-        // Calculate current round
-        uint256 elapsedTime = block.timestamp - dist.cliffPeriod;
-        uint256 currentRound = (elapsedTime / timeUnit) + 1;
-        if (currentRound > dist.totalRounds) {
-            currentRound = dist.totalRounds;
-        }
-
-        // Calculate total claimable amount up to current round
-        uint256 totalClaimableAmount;
+        // Calculate TGE and vesting amounts
         uint256 tgeAmount = (amount * dist.tgePercentage) / 100;
         uint256 vestingAmount = amount - tgeAmount;
 
-        if (currentRound == 1) {
+        uint256 totalClaimableAmount;
+
+        if (block.timestamp < dist.cliffPeriod) {
+            // Only TGE amount is claimable before cliff ends
             totalClaimableAmount = tgeAmount;
         } else {
-            uint256 roundsElapsed = currentRound - 1;
-            uint256 perRoundVestingAmount = vestingAmount / (dist.totalRounds - 1);
-            totalClaimableAmount = tgeAmount + (perRoundVestingAmount * roundsElapsed);
+            uint256 totalVestingRounds = dist.totalRounds - 1; // Exclude TGE round
+
+            if (totalVestingRounds == 0) {
+                // All tokens are claimable at TGE
+                totalClaimableAmount = amount;
+            } else {
+                uint256 perRoundVestingAmount = vestingAmount / totalVestingRounds;
+
+                uint256 elapsedTime = block.timestamp - dist.cliffPeriod;
+                uint256 roundsElapsed = elapsedTime / timeUnit;
+
+                // Ensure at least one round is counted if any time has passed
+                if (roundsElapsed == 0 && elapsedTime > 0) {
+                    roundsElapsed = 1;
+                }
+
+                if (roundsElapsed > totalVestingRounds) {
+                    roundsElapsed = totalVestingRounds;
+                }
+
+                uint256 vestedAmount = perRoundVestingAmount * roundsElapsed;
+
+                totalClaimableAmount = tgeAmount + vestedAmount;
+            }
         }
 
         // Calculate amount to claim
@@ -96,8 +109,8 @@ contract MerkleDistributor {
         // Update claimed amount
         claimedAmount[claimant][distributionIndex] += amountToClaim;
 
-        // Mark as fully claimed if all rounds are completed
-        if (currentRound == dist.totalRounds) {
+        // Check if fully claimed
+        if (claimedAmount[claimant][distributionIndex] == amount) {
             hasClaimed[claimant][distributionIndex] = true;
         }
 
