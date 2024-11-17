@@ -2,21 +2,23 @@
 pragma solidity ^0.8.4;
 
 contract MerkleDistributor {
-    IERC20 public token;
+    IERC20 public token = IERC20(0xFF3be01107A4bf55A3192d2e56b35ba9844Ab5a4);
     address public owner;
 
-    uint256 public timeUnit = 5 minutes; // Set to 30 days for production
+    uint256 public timeUnit = 30 days; // Set to 30 days for production
 
     struct Distribution {
         bytes32 merkleRoot;    // Merkle root for this distribution
         uint256 cliffPeriod;   // Cliff period before vesting starts
+        uint256 cliffTimestamp;   // Cliff period before vesting starts
         uint256 tgePercentage; // Initial percentage claimable at TGE
         uint256 totalRounds;   // Total number of vesting rounds
     }
 
     Distribution[] public distributions;
 
-    mapping(address => mapping(uint256 => uint256)) public claimedAmount; // Tracks claimed amounts
+    mapping(uint256 => uint256) public claimedPerDistribution; // Tracks claimed amounts per distribution
+    mapping(address => mapping(uint256 => uint256)) public claimedAmount; // Tracks claimed amounts per user per distribution
     mapping(address => mapping(uint256 => bool)) public hasClaimed; // Tracks if a user has claimed all tokens in a distribution
 
     event Claimed(address indexed account, uint256 amount, uint256 distributionIndex);
@@ -40,7 +42,8 @@ contract MerkleDistributor {
         for (uint256 i = 0; i < _merkleRoots.length; i++) {
             distributions.push(Distribution({
                 merkleRoot: _merkleRoots[i],
-                cliffPeriod: block.timestamp + (_cliffPeriods[i] * timeUnit),
+                cliffPeriod: _cliffPeriods[i],
+                cliffTimestamp: block.timestamp + (_cliffPeriods[i] * timeUnit),
                 tgePercentage: _tgePercentages[i],
                 totalRounds: _totalRounds[i]
             }));
@@ -66,47 +69,14 @@ contract MerkleDistributor {
         bytes32 node = keccak256(abi.encodePacked(claimant, amount));
         require(MerkleProof.verify(merkleProof, dist.merkleRoot, node), "Invalid proof");
 
-        // Calculate TGE and vesting amounts
-        uint256 tgeAmount = (amount * dist.tgePercentage) / 100;
-        uint256 vestingAmount = amount - tgeAmount;
-
-        uint256 totalClaimableAmount;
-
-        if (block.timestamp < dist.cliffPeriod) {
-            // Only TGE amount is claimable before cliff ends
-            totalClaimableAmount = tgeAmount;
-        } else {
-            uint256 totalVestingRounds = dist.totalRounds - 1; // Exclude TGE round
-
-            if (totalVestingRounds == 0) {
-                // All tokens are claimable at TGE
-                totalClaimableAmount = amount;
-            } else {
-                uint256 perRoundVestingAmount = vestingAmount / totalVestingRounds;
-
-                uint256 elapsedTime = block.timestamp - dist.cliffPeriod;
-                uint256 roundsElapsed = elapsedTime / timeUnit;
-
-                // Ensure at least one round is counted if any time has passed
-                if (roundsElapsed == 0 && elapsedTime > 0) {
-                    roundsElapsed = 1;
-                }
-
-                if (roundsElapsed > totalVestingRounds) {
-                    roundsElapsed = totalVestingRounds;
-                }
-
-                uint256 vestedAmount = perRoundVestingAmount * roundsElapsed;
-
-                totalClaimableAmount = tgeAmount + vestedAmount;
-            }
-        }
-
         // Calculate amount to claim
+        uint256 totalClaimableAmount = getTotalClaimableAmount(amount, distributionIndex);
         uint256 amountToClaim = totalClaimableAmount - claimedAmount[claimant][distributionIndex];
+
         require(amountToClaim > 0, "No tokens to claim");
 
         // Update claimed amount
+        claimedPerDistribution[distributionIndex] += amountToClaim;
         claimedAmount[claimant][distributionIndex] += amountToClaim;
 
         // Check if fully claimed
@@ -144,6 +114,45 @@ contract MerkleDistributor {
         token = IERC20(_token);
 
         owner = address(0);
+    }
+
+    function getTotalClaimableAmount(  
+        uint256 amount,
+        uint256 distributionIndex
+    ) public view returns (uint256) {
+        require(distributionIndex < distributions.length, "Invalid distribution index");
+        Distribution storage dist = distributions[distributionIndex];
+
+        // Calculate TGE and vesting amounts
+        uint256 tgeAmount = (amount * dist.tgePercentage) / 100;
+        uint256 vestingAmount = amount - tgeAmount;
+
+        uint256 totalClaimableAmount;
+
+        if (block.timestamp < dist.cliffTimestamp) {
+            // Only TGE amount is claimable before cliff ends
+            totalClaimableAmount = tgeAmount;
+        } else {
+            if (dist.totalRounds == 1) {
+                // All remaining tokens are claimable after cliff ends
+                totalClaimableAmount = amount;
+            } else {
+                uint256 perRoundVestingAmount = vestingAmount / dist.totalRounds;
+
+                uint256 elapsedTime = block.timestamp - dist.cliffTimestamp;
+                uint256 currentRound = (elapsedTime / timeUnit) + 1; // Add 1 to account for the first round
+
+                uint256 vestedAmount = perRoundVestingAmount * currentRound;
+
+                if (currentRound >= dist.totalRounds) {
+                    vestedAmount = vestingAmount;
+                }
+
+                totalClaimableAmount = tgeAmount + vestedAmount;
+            }
+        }
+
+        return totalClaimableAmount;
     }
 }
 
